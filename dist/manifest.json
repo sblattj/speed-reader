@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "Speed Reader",
+  "version": "1.0.0",
+  "description": "Speed read the current page or a selection in an in-page overlay: RSVP, chunk, and pacer modes, no accounts, no network calls.",
+  "permissions": ["activeTab", "scripting", "contextMenus", "storage", "commands"],
+  "action": {
+    "default_title": "Speed Reader"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "commands": {
+    "speed-read-page": {
+      "suggested_key": {
+        "default": "Alt+R"
+      },
+      "description": "Speed read this page"
+    },
+    "speed-read-selection": {
+      "suggested_key": {
+        "default": "Alt+Shift+R"
+      },
+      "description": "Speed read selection"
+    }
+  }
+}
