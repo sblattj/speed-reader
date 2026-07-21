@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Speed Reader</title>
+<!--STYLE-->
+</head>
+<body>
+<header class="app-header">
+  <h1>Speed Reader</h1>
+  <button id="themeToggleBtn" class="icon-btn" type="button" title="Toggle theme" aria-label="Toggle theme">&#9728;</button>
+</header>
+
+<main class="app-main">
+  <div id="readerRoot"></div>
+
+  <details class="card text-panel" id="textPanel" open>
+    <summary><span class="chev">&#9656;</span> Your text</summary>
+    <div class="text-panel-body">
+      <textarea id="textArea" spellcheck="false"></textarea>
+      <div class="text-panel-footer">
+        <span class="word-count" id="wordCountLabel">0 words</span>
+        <button type="button" class="btn-primary" id="btnLoadText">Load text</button>
+      </div>
+    </div>
+  </details>
+</main>
+<!--SCRIPT-->
+</body>
+</html>
