@@ -40,6 +40,14 @@ Chrome internal pages, the Chrome Web Store, and the built-in PDF viewer do not
 permit script injection. The extension shows a brief red `!` badge when invoked
 on one of those pages.
 
+### Pick exactly what you want to read
+
+Open the reader, choose **Pick element**, and click any paragraph, section,
+comment, or other live-page element. The reader reopens with only that element
+and its descendants.
+
+![Element picker selecting one Wikipedia paragraph and opening only that text in the reader](docs/assets/element-picker-wikipedia.gif)
+
 ## The three modes
 
 **RSVP (flash mode).** Words flash one chunk at a time at a fixed spot in the
@@ -47,6 +55,8 @@ middle of the stage. At chunk size 1, the chunk's optimal recognition letter is
 highlighted in orange and held at a fixed horizontal position (Spritz style), so
 your eyes never have to hunt for the next word. Chunk sizes 2 and 3 just center
 the group of words.
+
+![RSVP mode reading a picked Wikipedia paragraph](docs/assets/rsvp-mode.gif)
 
 **Chunk (phrase mode).** A midpoint between RSVP and Pacer. One phrase of
 roughly 3 to 5 words flashes at a time, split at natural clause boundaries
@@ -57,11 +67,15 @@ of the small within phrase eye movement that RSVP removes, but like RSVP it
 still hides the rest of the text, so backward glances and preview stay
 limited compared to Pacer.
 
+![Chunk mode reading phrases while the words-per-minute slider moves from 350 to 500 WPM](docs/assets/chunk-wpm.gif)
+
 **Pacer (guided highlight).** The full text stays on screen as normal
 paragraphs, and a highlight sweeps through it at your chosen pace, auto
 scrolling to keep the highlight roughly in the middle of the view. You can
 click any word to jump there. This mode keeps the whole text visible, which
 matters, see the note on the science below.
+
+![Pacer mode guiding the eye through a picked Wikipedia paragraph](docs/assets/pacer-mode.gif)
 
 The chunk size buttons (1, 2, 3) only apply to RSVP and Pacer. In Chunk mode
 they are disabled and replaced with a small note, since phrase length there
