@@ -1,8 +1,8 @@
 # Handoff: element picker (eyedropper) for the Speed Reader extension
 
-Status: SPECIFIED, not built. This document is written so a fresh agent can build
-the feature end to end without rediscovering the architecture. Read it top to
-bottom before touching code, then follow the change map and verification plan.
+Status: IMPLEMENTED AND VERIFIED on 2026-07-22. See `VERIFICATION.md` for the
+automated checks, Arc behavior checks, Wikipedia results, ten-page fixture sweep,
+and base extension sign-off.
 
 ## What to build
 
@@ -252,18 +252,18 @@ leave a second overlay or duplicate listeners behind.
 
 ## Acceptance criteria
 
-- [ ] `bun run build` passes all gates, deterministic.
-- [ ] "Pick element" button in the overlay header enters pick mode; the reader
+- [x] `bun run build` passes all gates, deterministic.
+- [x] "Pick element" button in the overlay header enters pick mode; the reader
       overlay hides and the page is interactive and scrollable during pick.
-- [ ] Hover highlights the element under the cursor accurately (tracks scroll).
-- [ ] Click reads exactly that element plus descendants (rung "Element"), and the
+- [x] Hover highlights the element under the cursor accurately (tracks scroll).
+- [x] Click reads exactly that element plus descendants (rung "Element"), and the
       click does not trigger the page (no link navigation, no button firing).
-- [ ] Esc cancels pick and restores the prior overlay; cold pick with no prior
+- [x] Esc cancels pick and restores the prior overlay; cold pick with no prior
       overlay cleans up with no leftover layer or listeners.
-- [ ] Empty element shows the pick-again empty state.
-- [ ] No new permissions; no dashes/happy/squarely; no `src/core` or `src/ui`
+- [x] Empty element shows the pick-again empty state.
+- [x] No new permissions; no dashes/happy/squarely; no `src/core` or `src/ui`
       changes; no scratchpad refs; existing gestures unchanged.
-- [ ] Verified live in Arc on at least four fixture pages, results logged.
+- [x] Verified live in Arc on at least four fixture pages, results logged.
 
 ## Open decisions (recommendations in brackets; decide and note what you chose)
 
