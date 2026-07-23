@@ -5,6 +5,8 @@ var listeners = {};
 var createdMenus = [];
 var injected = [];
 var sentMessages = [];
+var badgeColors = [];
+var badgeTexts = [];
 
 globalThis.chrome = {
   runtime: {
@@ -23,8 +25,8 @@ globalThis.chrome = {
     onClicked: {
       addListener: function (fn) { listeners.actionClicked = fn; }
     },
-    setBadgeBackgroundColor: function () {},
-    setBadgeText: function () {}
+    setBadgeBackgroundColor: function (details) { badgeColors.push(details); },
+    setBadgeText: function (details) { badgeTexts.push(details); }
   },
   commands: {
     onCommand: {
@@ -50,6 +52,9 @@ await import("../extension/background.js");
 function resetCalls() {
   injected.length = 0;
   sentMessages.length = 0;
+  badgeColors.length = 0;
+  badgeTexts.length = 0;
+  chrome.runtime.lastError = null;
 }
 
 describe("extension service worker", function () {
@@ -135,5 +140,43 @@ describe("extension service worker", function () {
       ["activeTab", "commands", "contextMenus", "scripting", "storage"]
     );
     expect(Object.prototype.hasOwnProperty.call(manifest, "host_permissions")).toBe(false);
+  });
+
+  it("flashes and clears the error badge when injection is rejected", function () {
+    var originalExecuteScript = chrome.scripting.executeScript;
+    var originalSetTimeout = globalThis.setTimeout;
+    var scheduled = [];
+
+    chrome.scripting.executeScript = function (details, callback) {
+      injected.push(details);
+      chrome.runtime.lastError = { message: "Cannot access a chrome:// URL" };
+      callback();
+      chrome.runtime.lastError = null;
+    };
+    globalThis.setTimeout = function (callback, delay) {
+      scheduled.push({ callback: callback, delay: delay });
+      return 1;
+    };
+
+    try {
+      resetCalls();
+      listeners.actionClicked({ id: 16 });
+
+      expect(sentMessages).toEqual([]);
+      expect(badgeColors).toEqual([{ color: "#cf4520", tabId: 16 }]);
+      expect(badgeTexts).toEqual([{ text: "!", tabId: 16 }]);
+      expect(scheduled.length).toBe(1);
+      expect(scheduled[0].delay).toBe(2000);
+
+      scheduled[0].callback();
+      expect(badgeTexts).toEqual([
+        { text: "!", tabId: 16 },
+        { text: "", tabId: 16 }
+      ]);
+    } finally {
+      chrome.scripting.executeScript = originalExecuteScript;
+      globalThis.setTimeout = originalSetTimeout;
+      chrome.runtime.lastError = null;
+    }
   });
 });
