@@ -8,6 +8,7 @@
 
 var MENU_SELECTION_ID = "speed-read-selection";
 var MENU_PAGE_ID = "speed-read-this-page";
+var MENU_PICK_ID = "speed-read-element";
 var BADGE_ERROR_MS = 2000;
 
 chrome.runtime.onInstalled.addListener(function () {
@@ -20,6 +21,11 @@ chrome.runtime.onInstalled.addListener(function () {
     id: MENU_PAGE_ID,
     title: "Speed read this page",
     contexts: ["page", "link", "image"]
+  });
+  chrome.contextMenus.create({
+    id: MENU_PICK_ID,
+    title: "Speed read an element",
+    contexts: ["page"]
   });
 });
 
@@ -69,5 +75,7 @@ chrome.contextMenus.onClicked.addListener(function (info, tab) {
     invoke(tabId, "selection");
   } else if (info.menuItemId === MENU_PAGE_ID) {
     invoke(tabId, "page");
+  } else if (info.menuItemId === MENU_PICK_ID) {
+    invoke(tabId, "pick");
   }
 });

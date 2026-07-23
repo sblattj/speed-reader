@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "bun scripts/build.ts"
+    "build": "bun scripts/build.ts",
+    "test": "bun test"
   }
 }
