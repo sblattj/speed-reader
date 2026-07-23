@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Element picker regression fixture</title>
+  <style>
+    body {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 32px;
+      font-family: system-ui, sans-serif;
+      line-height: 1.5;
+    }
+    section {
+      margin: 28px 0;
+      padding: 20px;
+      border: 1px solid #bbb;
+    }
+    #scroll-space { height: 900px; }
+    #empty-target { width: 180px; height: 80px; background: #ddd; }
+  </style>
+  <script>
+    window.__fixtureLinkClicks = 0;
+    window.__fixtureStorageDelayMs = 0;
+    window.__fixtureShadowKeydownAdds = 0;
+    var originalAddEventListener = EventTarget.prototype.addEventListener;
+    EventTarget.prototype.addEventListener = function (type, listener, options) {
+      if (this instanceof ShadowRoot && type === "keydown") {
+        window.__fixtureShadowKeydownAdds += 1;
+      }
+      return originalAddEventListener.call(this, type, listener, options);
+    };
+    window.chrome = {
+      runtime: {
+        lastError: null,
+        onMessage: {
+          addListener: function (listener) {
+            window.__sendSpeedReaderMessage = function (kind) {
+              listener({ kind: kind });
+            };
+          }
+        }
+      },
+      storage: {
+        sync: {
+          get: function (keys, callback) {
+            setTimeout(function () {
+              callback({
+                sr_wpm: 100,
+                sr_mode: "rsvp",
+                sr_chunk: 1,
+                sr_theme: "light"
+              });
+            }, window.__fixtureStorageDelayMs);
+          },
+          set: function () {}
+        }
+      }
+    };
+  </script>
+  <script src="../../dist/content.js"></script>
+</head>
+<body>
+  <main>
+    <h1>Element picker regression fixture</h1>
+    <section id="first-target">
+      <h2>First target</h2>
+      <p>Alpha beta gamma delta epsilon.</p>
+      <p>Zeta eta theta iota kappa.</p>
+    </section>
+    <section id="link-target">
+      <h2>Link target</h2>
+      <p>Lambda mu nu xi omicron.</p>
+      <a id="danger-link" href="#activated" onclick="window.__fixtureLinkClicks += 1">
+        This link must not activate during a pick.
+      </a>
+    </section>
+    <div id="scroll-space"></div>
+    <section id="last-target">
+      <h2>Last target</h2>
+      <p>Pi rho sigma tau upsilon.</p>
+      <p>Phi chi psi omega.</p>
+    </section>
+    <div id="empty-target" aria-label="Empty target"></div>
+  </main>
+</body>
+</html>

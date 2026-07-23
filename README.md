@@ -1,8 +1,8 @@
 # Speed Reader
 
-A single self contained web page for practicing speed reading. No build step, no
-external requests, no dependencies. Everything, markup, styles, and logic, lives
-in one `index.html` file.
+A self-contained speed reader available as both a standalone page and a private
+Chrome extension. Both surfaces share the same reader implementation. There are
+no runtime dependencies, external requests, accounts, or analytics.
 
 ## Open it
 
@@ -11,6 +11,34 @@ open ~/code/speed-reader/index.html
 ```
 
 It works straight from `file://`, no server needed.
+
+## Install the browser extension
+
+Build the generated artifacts:
+
+```
+cd ~/code/speed-reader
+bun run build
+```
+
+Open `chrome://extensions` in Arc or Chrome, enable Developer mode, choose
+**Load unpacked**, and select `~/code/speed-reader/dist`.
+
+Extension gestures:
+
+- Click the toolbar button or press Alt+R to read the page.
+- Press Alt+Shift+R or choose **Speed read selection** from the context menu to
+  read selected text.
+- Choose **Speed read an element** from the page context menu to enter element
+  pick mode directly.
+- Choose **Pick element** in the reader header to hide the reader and select one
+  element from the live page.
+- In pick mode, move the pointer to highlight an element, scroll as needed, click
+  to read only that element and its descendants, or press Esc to cancel.
+
+Chrome internal pages, the Chrome Web Store, and the built-in PDF viewer do not
+permit script injection. The extension shows a brief red `!` badge when invoked
+on one of those pages.
 
 ## The three modes
 

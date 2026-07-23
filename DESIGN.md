@@ -1,22 +1,22 @@
 # Speed Reader Chrome Extension: Design
 
-Status: PROPOSED, awaiting Stephen's approval. No implementation until then.
-The existing standalone `index.html` stays working as-is throughout.
+Status: IMPLEMENTED through v1.1. The standalone `index.html` and extension are
+generated together from the shared reader sources.
 
 ## Goal
 
 Read any text in the browser with the existing three modes (RSVP, Chunk, Pacer):
-a selection, or a whole article, invoked in one gesture, with no copy-paste round
-trip. Personal install first (load unpacked); publishing is a separate, optional
-later phase.
+a selection, a whole article, or one element chosen from the live page, invoked
+without a copy-paste round trip. Personal install first (load unpacked);
+publishing is a separate, optional later phase.
 
 ## Non-goals (v1)
 
 - Chrome Web Store publishing (later phase under the public identity if wanted).
 - Reading inside Chrome's built-in PDF viewer (content scripts cannot run there;
   the paste-into-standalone-page path remains the fallback).
-- Web-app UIs (mail threads, dashboards). Target is prose: articles, docs, blog
-  posts, plus any manual selection anywhere.
+- Automatic extraction of complete web-app UIs such as mail threads and
+  dashboards. A manual selection or picked element still works there.
 - Firefox or Safari ports.
 
 ## Approaches considered
@@ -77,9 +77,9 @@ on the sample text, dash scan) so every build is a regression gate.
 
 ### Data flow
 
-1. Gesture: toolbar click, context menu ("Speed read selection" / "Speed read
-   this page"), or keyboard command (proposal: Alt+R page, Alt+Shift+R
-   selection).
+1. Gesture: toolbar click, context menu ("Speed read selection", "Speed read
+   this page", or "Speed read an element"), keyboard command (Alt+R page or
+   Alt+Shift+R selection), or the overlay's "Pick element" button.
 2. background.js receives the gesture; chrome.scripting.executeScript injects
    the content bundle into the active tab. activeTab grants temporary access,
    so the extension holds NO broad host permissions, ever.
@@ -98,6 +98,8 @@ on the sample text, dash scan) so every build is a regression gate.
    paragraph breaks preserved.
 3. Fallback: innerText of main / article / [role=main], else body, with
    nav/footer/aside stripped, collapsed to paragraphs.
+4. Element: visible paragraph text rooted at the element the user picked, with
+   the same subtree exclusions as fallback extraction.
 
 The overlay header shows which rung fired, the word count, and estimated minutes
 at the current wpm BEFORE playback starts, so a bad extraction is visible
@@ -109,10 +111,15 @@ select text instead" state, never a silent empty read.
 Same three modes and controls as the standalone page, plus:
 
 - Full-viewport scrim dimming the page, reader card centered, max-width 900px.
-- Header: source title, word count, estimated time, extraction-rung tag, close.
+- Header: source title, word count, estimated time, extraction-rung tag, element
+  picker, and close.
 - Esc closes. Space and arrows as today, scoped so page shortcuts underneath
   do not fire (capture-phase guard on the document while mounted).
 - Theme follows the stored reader theme; default from prefers-color-scheme.
+- Pick mode temporarily hides the reader, restores page scrolling, highlights
+  the element under the pointer, and suppresses page clicks. Esc cancels and
+  restores the prior reader. A completed pick reuses the mounted reader with
+  only the picked subtree as its text.
 - v1.5: per-URL resume. Last position keyed by canonical URL in
   chrome.storage.session; on reopen, offer "Resume at word N".
 
@@ -139,15 +146,19 @@ virtualized and lazy-loaded content. Deliberately out of v1 to protect scope.
    Accept: chunker distribution on the sample text identical (78 chunks,
    sizes 2 to 5, split 0/8/13/4/53), and the live-verified behaviors from the
    2026-07-20 session re-verified against the regenerated file.
-2. **Extension shell.** Load unpacked in Arc. Accept: all three gestures mount
+2. **Extension shell.** Load unpacked in Arc. Accept: all page and selection gestures mount
    the overlay on a news article; a selection works inside a web app; Esc
    unmounts clean; settings persist across sites and a browser restart.
 3. **Extraction hardening.** Ten-site fixture list (news, docs, blogs, one SPA,
    one paywalled teaser). Accept: rung plus word count sane on all ten; empty
    extractions fail loudly.
-4. **v1.5.** Per-URL resume, focus trap and aria pass, icon set.
-5. **v2.** In-situ pacer, after its own design addendum.
-6. **Optional publish.** oss-launch flow under the public account: copy then
+4. **Element picker.** Overlay button and page context menu start an inspectable
+   picker layer. Accept: hover follows the target, scrolling remains available,
+   click reads only the chosen subtree without activating the page, Esc cancels,
+   and empty elements show a pick-again message.
+5. **v1.5.** Per-URL resume, focus trap and aria pass, icon set.
+6. **v2.** In-situ pacer, after its own design addendum.
+7. **Optional publish.** oss-launch flow under the public account: copy then
    mutate, scrub, store listing, privacy policy page. Deferred decision;
    affects nothing in v1.
 
