@@ -276,6 +276,39 @@ leave a second overlay or duplicate listeners behind.
 - Highlight affordance detail: outline box only, or box plus a tag/word-count pill.
   [Box plus a small tag-name pill; add live word count only if cheap.]
 
+## Also outstanding from the base extension build (do these, not picker-specific)
+
+These predate the picker and were never finished. Fold them into the same work so
+the extension is actually signed off, not just the new feature.
+
+1. Live verification of the BASE overlay in Arc, the full gesture matrix. Confirmed
+   so far: the service worker loads, the manifest permissions are exactly the five,
+   both commands register (Alt+R, Alt+Shift+R), both context menus are created,
+   `executeScript` injection works, and the user confirmed the page-reading overlay
+   renders and reads. NOT yet driven and confirmed: the selection path
+   (Alt+Shift+R and the "Speed read selection" menu) reading a highlighted range;
+   Esc and close-button unmount leaving no leftover host or listeners; the "!" error
+   badge on a chrome:// page; and settings (wpm/mode/theme) round-tripping through
+   `chrome.storage.sync` across two tabs and a browser restart. Remember the two
+   verified traps: CDP cannot fire the keyboard commands (the user does one real
+   gesture per tab to grant activeTab), and the reader overlay is a CLOSED shadow
+   root so CDP cannot inspect inside it (verify via observable outcomes: does the
+   card appear, does the page word count look right, is the host removed after Esc).
+2. Extraction hardening across a fixture sweep, roughly ten real pages: a couple of
+   news articles, two docs pages, a blog/essay, a comment-heavy thread, one app-shell
+   page, a paywalled teaser, a Wikipedia article, and a GitHub README. For each, log
+   which rung fired and a sane word count, and confirm an empty extraction shows the
+   explicit empty state rather than reading nothing. Fix extraction bugs the sweep
+   surfaces. The picker adds a fourth rung, so include a picked-element case per site.
+3. Final report to the user: how to install (load unpacked from
+   `~/code/speed-reader/dist`), the gesture list, the traps, and the fixture results.
+
+Status note on the original plan: the "sync dotorg" step is already satisfied a
+different way. The project was moved out of `~/.dotorg/projects/speed-reader` into
+its own private repo `sblattj/speed-reader` (local `~/code/speed-reader`), and the
+dotorg copy was removed and pushed. There is nothing left to sync back to dotorg;
+all further work lands in this repo.
+
 ## Attribution
 
 Commits: include a `Claude-Session-Id:` trailer and the model line, per the
