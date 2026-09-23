@@ -68,6 +68,17 @@ Chrome internal pages, the Chrome Web Store, and the built-in PDF viewer do not
 permit script injection. The extension shows a brief red `!` badge when invoked
 on one of those pages.
 
+### Embedded frames
+
+Some pages keep their text inside an embedded frame (an iframe) from another
+site: document viewers, previews, course players, published artifacts. Out of
+the box the extension can only reach the page you invoked it on, so on those
+pages the reader and the picker offer **Allow reading embedded frames**. One
+click grants the optional access (Chrome asks you to confirm), and the action
+you were doing picks up where it left off. After that, **Read page** uses the
+frame that holds the text and **Pick element** works inside frames. Turn it off
+again from the extension's **Options** page.
+
 ### Pick exactly what you want to read
 
 Open the reader, choose **Pick element**, and click any paragraph, section,
