@@ -1,3 +1,5 @@
+<img src="extension/icons/icon.svg" alt="" width="96" align="right">
+
 # Speed Reader
 
 A self-contained speed reader available as both a standalone page and a
