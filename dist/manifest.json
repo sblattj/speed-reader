@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Speed Reader",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "description": "Speed read a page, selection, or picked element in an in-page overlay: RSVP, chunk, and pacer modes, no accounts, no network calls.",
   "permissions": ["activeTab", "scripting", "contextMenus", "storage", "commands"],
   "optional_host_permissions": ["<all_urls>"],
