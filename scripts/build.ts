@@ -11,7 +11,7 @@
 // needs a second Bun.build call plus a second output target, not a
 // rewrite of this file.
 
-import { mkdtempSync, rmSync, writeFileSync, readFileSync, mkdirSync, readdirSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, readFileSync, mkdirSync, readdirSync, cpSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { Buffer } from "node:buffer";
@@ -34,6 +34,11 @@ const DIST_DIR = join(ROOT, "dist");
 const DIST_CONTENT_PATH = join(DIST_DIR, "content.js");
 const DIST_MANIFEST_PATH = join(DIST_DIR, "manifest.json");
 const DIST_BACKGROUND_PATH = join(DIST_DIR, "background.js");
+// Icons are rendered from extension/icons/icon.svg and committed as PNGs;
+// only the PNG sizes the manifest names are shipped in dist/icons.
+const EXT_ICONS_SRC_DIR = join(ROOT, "extension/icons");
+const DIST_ICONS_DIR = join(DIST_DIR, "icons");
+const ICON_FILES = ["icon16.png", "icon32.png", "icon48.png", "icon128.png"];
 const EXPECTED_PERMISSIONS = ["activeTab", "scripting", "contextMenus", "storage", "commands"];
 
 type GateResult = { name: string; ok: boolean; detail: string };
@@ -74,6 +79,9 @@ function writeExtensionDist(contentJs: string): { manifestText: string; backgrou
   const backgroundText = readFileSync(EXT_BACKGROUND_SRC_PATH, "utf8");
   writeFileSync(DIST_MANIFEST_PATH, manifestText, "utf8");
   writeFileSync(DIST_BACKGROUND_PATH, backgroundText, "utf8");
+  rmSync(DIST_ICONS_DIR, { recursive: true, force: true });
+  mkdirSync(DIST_ICONS_DIR, { recursive: true });
+  for (const f of ICON_FILES) cpSync(join(EXT_ICONS_SRC_DIR, f), join(DIST_ICONS_DIR, f));
   return { manifestText, backgroundText };
 }
 
@@ -124,12 +132,18 @@ function gateManifestJson(manifestText: string): GateResult {
 
 function gateDistContents(): GateResult {
   const entries = readdirSync(DIST_DIR).sort();
-  const expected = ["background.js", "content.js", "manifest.json"];
-  const ok = entries.length === expected.length && entries.every((e, i) => e === expected[i]);
+  const expected = ["background.js", "content.js", "icons", "manifest.json"];
+  const icons = readdirSync(DIST_ICONS_DIR).sort();
+  const expectedIcons = [...ICON_FILES].sort();
+  const ok =
+    entries.length === expected.length && entries.every((e, i) => e === expected[i]) &&
+    icons.length === expectedIcons.length && icons.every((e, i) => e === expectedIcons[i]);
   return {
     name: "dist-contents",
     ok,
-    detail: ok ? "dist/ contains exactly " + JSON.stringify(expected) : "dist/ contains " + JSON.stringify(entries)
+    detail: ok
+      ? "dist/ contains exactly " + JSON.stringify(expected) + " with icons " + JSON.stringify(expectedIcons)
+      : "dist/ contains " + JSON.stringify(entries) + ", dist/icons contains " + JSON.stringify(icons)
   };
 }
 
@@ -152,7 +166,9 @@ function gateNoScratchpadRefs(files: { path: string; text: string }[]): GateResu
 
 function renderPage(css: string, js: string): string {
   const template = readFileSync(TEMPLATE_PATH, "utf8");
-  let html = template.replace("<!--STYLE-->", "<style>\n" + css + "\n</style>");
+  const icon = readFileSync(join(EXT_ICONS_SRC_DIR, "icon32.png")).toString("base64");
+  let html = template.replace("<!--FAVICON-->", "<link rel=\"icon\" href=\"data:image/png;base64," + icon + "\">");
+  html = html.replace("<!--STYLE-->", "<style>\n" + css + "\n</style>");
   html = html.replace("<!--SCRIPT-->", "<script>\n\"use strict\";\n" + js + "\n</script>");
   return html;
 }

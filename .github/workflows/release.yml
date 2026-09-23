@@ -1,0 +1,73 @@
+name: release
+
+# Push a tag like v1.2.0 (matching extension/manifest.json "version") to build,
+# test, and publish a GitHub release with the extension zip, the standalone
+# page, and the one-line installer attached.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to (re)publish, e.g. v1.1.0"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Check tag matches manifest version
+        run: |
+          manifest="v$(jq -r .version extension/manifest.json)"
+          if [ "$manifest" != "$TAG" ]; then
+            echo "::error::tag $TAG does not match extension/manifest.json version $manifest"
+            exit 1
+          fi
+
+      - name: Test
+        run: bun test
+
+      - name: Build and package
+        run: scripts/package.sh
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          cat > notes.md <<MD
+          ## Install the Chrome extension
+
+          One line (macOS or Linux):
+
+          \`\`\`
+          curl -fsSL https://github.com/$REPO/releases/latest/download/install.sh | bash
+          \`\`\`
+
+          Then on \`chrome://extensions\`: turn on **Developer mode**, click **Load unpacked**, and paste the path the script copied (\`~/.speed-reader/extension\`). To update later, rerun the same line and click reload on the extension card.
+
+          Manual: download \`speed-reader-extension.zip\`, unzip it, and **Load unpacked** the unzipped folder.
+
+          Works in Chrome, Arc, Brave, and Edge. Press **Alt+R** on any page to read it.
+
+          ## No install at all
+
+          Download \`speed-reader.html\` and open it in any browser. It works offline from \`file://\`.
+          MD
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" release/* --clobber
+          else
+            gh release create "$TAG" release/* --title "Speed Reader $TAG" --notes-file notes.md --generate-notes
+          fi
