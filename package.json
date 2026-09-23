@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "bun scripts/build.ts",
+    "package": "scripts/package.sh",
     "test": "bun test"
   }
 }
