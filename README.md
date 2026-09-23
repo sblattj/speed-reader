@@ -1,28 +1,54 @@
 # Speed Reader
 
-A self-contained speed reader available as both a standalone page and a private
+A self-contained speed reader available as both a standalone page and a
 Chrome extension. Both surfaces share the same reader implementation. There are
 no runtime dependencies, external requests, accounts, or analytics.
 
-## Open it
+## Install the Chrome extension
+
+One line (macOS or Linux):
 
 ```
-open ~/code/speed-reader/index.html
+curl -fsSL https://github.com/sblattj/speed-reader/releases/latest/download/install.sh | bash
 ```
 
-It works straight from `file://`, no server needed.
+The script downloads the latest release into `~/.speed-reader/extension`, copies
+that path to your clipboard, and opens `chrome://extensions`. Then:
 
-## Install the browser extension
+1. Turn on **Developer mode** (top right).
+2. Click **Load unpacked** and paste the path (Cmd+Shift+G in the macOS file
+   picker).
+3. Pin Speed Reader and press Alt+R on any page.
 
-Build the generated artifacts:
+To update, rerun the same line and click the reload icon on the Speed Reader
+card. The folder stays put, so your settings carry over.
+
+Manual install: download `speed-reader-extension.zip` from the
+[latest release](https://github.com/sblattj/speed-reader/releases/latest),
+unzip it, and **Load unpacked** the unzipped folder. Works in Chrome, Arc,
+Brave, and Edge.
+
+## Or just open the page
+
+Download `speed-reader.html` from the
+[latest release](https://github.com/sblattj/speed-reader/releases/latest) and
+open it in any browser. It works straight from `file://`, no server needed.
+
+## Build from source
 
 ```
-cd ~/code/speed-reader
-bun run build
+git clone https://github.com/sblattj/speed-reader.git
+cd speed-reader
+bun run build     # writes index.html and dist/ (load dist/ unpacked)
+bun test
+bun run package   # also zips release assets into release/
 ```
 
-Open `chrome://extensions` in Arc or Chrome, enable Developer mode, choose
-**Load unpacked**, and select `~/code/speed-reader/dist`.
+To cut a release, bump `version` in `extension/manifest.json`, then push a
+matching tag (`git tag v1.2.0 && git push origin v1.2.0`). The release workflow
+builds, tests, and publishes the zip, page, and installer.
+
+## Using the extension
 
 Extension gestures:
 
