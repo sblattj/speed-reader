@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Speed Reader: embedded frames</title>
+<link rel="icon" href="icons/icon32.png">
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f7f5f0; --card: #ffffff; --text: #201d1a; --dim: #635e55; --border: #e2ddd3;
+    --accent: #147888; --accent-ink: #ffffff; --pivot: #cf4520;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161a; --card: #1f232a; --text: #eae7e0; --dim: #9ea4ae; --border: #2c313a;
+      --accent: #4fb8c4; --accent-ink: #08282c; --pivot: #ff6f47;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 20px; background: var(--bg); color: var(--text);
+    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  .card {
+    max-width: 440px; margin: 0 auto; padding: 22px; background: var(--card);
+    border: 1px solid var(--border); border-radius: 14px;
+  }
+  header { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  header img { width: 40px; height: 40px; }
+  h1 { margin: 0; font-size: 18px; }
+  p { margin: 0 0 12px; }
+  .dim { color: var(--dim); font-size: 13px; }
+  .status { font-weight: 700; }
+  .status.on { color: var(--accent); }
+  .status.off { color: var(--pivot); }
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+  button {
+    min-height: 36px; padding: 0 16px; border-radius: 999px; cursor: pointer;
+    font: 700 14px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    border: 1px solid var(--accent); background: var(--accent); color: var(--accent-ink);
+  }
+  button.secondary { background: transparent; color: var(--text); border-color: var(--border); }
+  button[hidden] { display: none; }
+</style>
+</head>
+<body>
+<main class="card">
+  <header>
+    <img src="icons/icon48.png" alt="">
+    <h1>Read inside embedded frames</h1>
+  </header>
+  <p>Some pages show their text inside an embedded frame (an iframe) served from a different site, like document viewers, previews, and course players. Speed Reader can only see that text with your permission.</p>
+  <p class="dim">Speed Reader still only runs when you press its button, shortcut, or menu item, and still sends nothing anywhere. This just lets it read the frames on the page you invoke it on. You can turn it off here any time.</p>
+  <p>Status: <span id="status" class="status">checking</span></p>
+  <div class="actions">
+    <button id="allow" type="button" hidden>Allow reading embedded frames</button>
+    <button id="revoke" type="button" class="secondary" hidden>Turn off</button>
+    <button id="close" type="button" class="secondary" hidden>Close</button>
+  </div>
+</main>
+<script src="grant.js"></script>
+</body>
+</html>
