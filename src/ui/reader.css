@@ -229,6 +229,9 @@ button, input {
   font-family: var(--font-serif);
   font-size: clamp(1.8rem, 5vw, 3rem);
 }
+/* display:flex above beats the UA [hidden] rule; without this the empty
+   grid keeps its 25ch in the row and shoves chunk size 2/3 off center. */
+.pivot-grid[hidden] { display: none; }
 .pivot-cell {
   white-space: nowrap;
   overflow: visible;
@@ -247,6 +250,8 @@ button, input {
   font-size: clamp(1.5rem, 4.5vw, 2.5rem);
   text-align: center;
   padding: 0 0.5rem;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 /* Chunk view */
