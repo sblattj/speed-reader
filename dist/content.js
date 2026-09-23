@@ -3156,7 +3156,10 @@ textarea {
   gap: 0.55rem;
 }
 
-.sr-ext-pick {
+.sr-ext-grant { margin-top: 1rem; }
+
+.sr-ext-pick,
+.sr-ext-grant {
   min-height: 34px;
   padding: 0.45rem 0.8rem;
   border: 1px solid var(--accent-control);
@@ -3167,8 +3170,10 @@ textarea {
   cursor: pointer;
   transition: filter 0.15s ease;
 }
-.sr-ext-pick:hover { filter: brightness(1.08); }
-.sr-ext-pick:focus-visible {
+.sr-ext-pick:hover,
+.sr-ext-grant:hover { filter: brightness(1.08); }
+.sr-ext-pick:focus-visible,
+.sr-ext-grant:focus-visible {
   outline: 2px solid var(--accent-pivot);
   outline-offset: 2px;
 }
@@ -3253,7 +3258,12 @@ textarea {
     var pickerTagEl = null;
     var currentTarget = null;
     var pickerResumePlayback = false;
+    var pickerFrameAccess = false;
+    var pickerAllowBtn = null;
     var lifecycleVersion = 0;
+    var isTop = window === window.top;
+    var frameToken = Math.random().toString(36).slice(2);
+    var MIN_BLOCKED_FRAME_AREA = 200 * 150;
     function isReaderKey(e) {
       if (e.key === " " || e.key === "Spacebar")
         return true;
@@ -3320,13 +3330,43 @@ textarea {
       var root = document.querySelector("main") || document.querySelector("article") || document.querySelector("[role=main]") || document.body;
       return collectParagraphs(root);
     }
+    function isFrameElement(el) {
+      return !!(el && (el.tagName === "IFRAME" || el.tagName === "FRAME"));
+    }
+    function isBlockedFrame(el) {
+      try {
+        return !el.contentDocument;
+      } catch (err) {
+        return true;
+      }
+    }
+    function countBlockedFrames() {
+      var frames = document.querySelectorAll("iframe, frame");
+      var n = 0;
+      for (var i = 0;i < frames.length; i++) {
+        var rect = frames[i].getBoundingClientRect();
+        if (rect.width * rect.height < MIN_BLOCKED_FRAME_AREA)
+          continue;
+        if (isBlockedFrame(frames[i]))
+          n++;
+      }
+      return n;
+    }
+    function countWords(text) {
+      var trimmed = (text || "").trim();
+      return trimmed ? trimmed.split(/\s+/).length : 0;
+    }
     function extractFromElement(el) {
-      return {
+      var extraction = {
         rung: 4,
         rungLabel: "Element",
         title: document.title || null,
         text: collectParagraphs(el)
       };
+      if (isFrameElement(el) && isBlockedFrame(el) && !extraction.text.trim()) {
+        extraction.needsFrameAccess = true;
+      }
+      return extraction;
     }
     function runExtraction() {
       var sel = window.getSelection();
@@ -3353,6 +3393,25 @@ textarea {
       }
       return { rung: 0, rungLabel: null, title: null, text: "" };
     }
+    function notifyBackground(message) {
+      try {
+        chrome.runtime.sendMessage(message, function() {
+          chrome.runtime.lastError;
+        });
+      } catch (err) {}
+    }
+    function requestFrameAccess(resumeKind) {
+      notifyBackground({ type: "open-grant", resume: resumeKind });
+    }
+    window.__SPEED_READER_API__ = {
+      extract: function() {
+        var extraction = runExtraction();
+        extraction.words = countWords(extraction.text);
+        extraction.area = window.innerWidth * window.innerHeight;
+        extraction.blockedFrames = isTop ? countBlockedFrames() : 0;
+        return extraction;
+      }
+    };
     function createChromeStorageAdapter() {
       return {
         get: function(key) {
@@ -3469,7 +3528,15 @@ textarea {
       pickBtn.setAttribute("aria-label", "Pick an element to speed read");
       pickBtn.title = "Pick an element";
       pickBtn.textContent = "Pick element";
-      pickBtn.addEventListener("click", startElementPicker);
+      pickBtn.addEventListener("click", function() {
+        startElementPicker(false);
+        chrome.runtime.sendMessage({ type: "start-pick" }, function(response) {
+          if (chrome.runtime.lastError || !response || !picking)
+            return;
+          pickerFrameAccess = !!response.frameAccess;
+          refreshPickerBanner();
+        });
+      });
       var closeBtn = document.createElement("button");
       closeBtn.type = "button";
       closeBtn.className = "sr-ext-close";
@@ -3519,7 +3586,7 @@ textarea {
       document.addEventListener("keydown", docKeydownGuard, true);
     }
     async function renderExtraction(refs, extraction, renderVersion) {
-      var hasText = !!(extraction.text && extraction.text.trim());
+      var hasText = !!(extraction.text && extraction.text.trim()) && !extraction.needsFrameAccess;
       refs.emptyEl.hidden = hasText;
       refs.readerRootEl.hidden = !hasText;
       if (!hasText) {
@@ -3532,7 +3599,20 @@ textarea {
         refs.rungEl.textContent = extraction.rungLabel || "Nothing found";
         refs.titleEl.textContent = document.title || "";
         refs.metaEl.textContent = "";
-        refs.emptyEl.textContent = extraction.rung === 4 ? "Nothing readable in that element, pick another." : "Nothing readable found, select text instead.";
+        if (extraction.needsFrameAccess) {
+          refs.emptyEl.textContent = extraction.rung === 4 ? "That element is an embedded frame from another site. Speed Reader needs your OK to read inside embedded frames." : "This page's text lives in an embedded frame from another site. Speed Reader needs your OK to read inside embedded frames.";
+          var grantBtn = document.createElement("button");
+          grantBtn.type = "button";
+          grantBtn.className = "sr-ext-grant";
+          grantBtn.textContent = "Allow reading embedded frames";
+          grantBtn.addEventListener("click", function() {
+            requestFrameAccess(extraction.rung === 4 ? "pick" : "page");
+          });
+          refs.emptyEl.appendChild(document.createElement("br"));
+          refs.emptyEl.appendChild(grantBtn);
+        } else {
+          refs.emptyEl.textContent = extraction.rung === 4 ? "Nothing readable in that element, pick another." : "Nothing readable found, select text instead.";
+        }
         return;
       }
       var doc = tokenizeText(extraction.text);
@@ -3604,7 +3684,7 @@ textarea {
       return renderIntoOverlay(runExtraction());
     }
     function pickerLayerCss() {
-      return "" + ":host{all:initial;position:fixed;inset:0;z-index:2147483647;pointer-events:none;" + 'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}' + "*,*::before,*::after{box-sizing:border-box;}" + ".highlight{display:none;position:fixed;pointer-events:none;border:2px solid #147888;" + "background:rgba(20,120,136,.16);border-radius:3px;}" + ".tag{position:absolute;left:-2px;top:0;transform:translateY(calc(-100% - 4px));" + "max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" + "padding:3px 7px;border-radius:999px;background:#147888;color:#fff;" + 'font:700 11px/1.3 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;' + "letter-spacing:.04em;text-transform:uppercase;box-shadow:0 2px 8px rgba(0,0,0,.22);}" + ".banner{position:fixed;top:16px;left:50%;transform:translateX(-50%);max-width:calc(100vw - 32px);" + "padding:9px 14px;border:1px solid rgba(255,255,255,.28);border-radius:999px;" + "background:#173238;color:#fff;box-shadow:0 6px 24px rgba(0,0,0,.28);" + 'font:600 13px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;' + "text-align:center;white-space:nowrap;}";
+      return "" + ":host{all:initial;position:fixed;inset:0;z-index:2147483647;pointer-events:none;" + 'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}' + "*,*::before,*::after{box-sizing:border-box;}" + ".highlight{display:none;position:fixed;pointer-events:none;border:2px solid #147888;" + "background:rgba(20,120,136,.16);border-radius:3px;}" + ".tag{position:absolute;left:-2px;top:0;transform:translateY(calc(-100% - 4px));" + "max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" + "padding:3px 7px;border-radius:999px;background:#147888;color:#fff;" + 'font:700 11px/1.3 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;' + "letter-spacing:.04em;text-transform:uppercase;box-shadow:0 2px 8px rgba(0,0,0,.22);}" + ".banner{position:fixed;top:16px;left:50%;transform:translateX(-50%);max-width:calc(100vw - 32px);" + "padding:9px 14px;border:1px solid rgba(255,255,255,.28);border-radius:999px;" + "background:#173238;color:#fff;box-shadow:0 6px 24px rgba(0,0,0,.28);" + 'font:600 13px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;' + "text-align:center;white-space:nowrap;}" + ".banner button{pointer-events:auto;margin-left:10px;padding:3px 10px;border:0;border-radius:999px;" + "background:#4fb8c4;color:#08282c;cursor:pointer;" + 'font:700 12px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}' + ".banner button[hidden]{display:none;}";
     }
     function buildPickerLayer() {
       pickerHostEl = document.createElement("div");
@@ -3620,35 +3700,52 @@ textarea {
       pickerTagEl = document.createElement("span");
       pickerTagEl.className = "tag";
       pickerHighlightEl.appendChild(pickerTagEl);
+      pickerShadow.appendChild(styleEl);
+      pickerShadow.appendChild(pickerHighlightEl);
+      if (!isTop)
+        return;
       var bannerEl = document.createElement("div");
       bannerEl.className = "banner";
       bannerEl.setAttribute("role", "status");
-      bannerEl.textContent = "Click an element to read it. Esc to cancel.";
-      pickerShadow.appendChild(styleEl);
-      pickerShadow.appendChild(pickerHighlightEl);
+      bannerEl.appendChild(document.createTextNode("Click an element to read it. Esc to cancel."));
+      pickerAllowBtn = document.createElement("button");
+      pickerAllowBtn.type = "button";
+      pickerAllowBtn.textContent = "Allow reading embedded frames";
+      pickerAllowBtn.hidden = true;
+      bannerEl.appendChild(pickerAllowBtn);
       pickerShadow.appendChild(bannerEl);
+      refreshPickerBanner();
+    }
+    function refreshPickerBanner() {
+      if (!pickerAllowBtn)
+        return;
+      pickerAllowBtn.hidden = pickerFrameAccess || countBlockedFrames() === 0;
+    }
+    function isHandledFrame(el) {
+      return isFrameElement(el) && (pickerFrameAccess || !isBlockedFrame(el));
+    }
+    function hidePickerHighlight() {
+      currentTarget = null;
+      if (pickerHighlightEl)
+        pickerHighlightEl.style.display = "none";
+      if (pickerHostEl)
+        pickerHostEl.removeAttribute("data-target-tag");
     }
     function isPickerOwnedElement(el) {
       return !!(!el || el === pickerHostEl || el === hostEl || pickerHostEl && pickerHostEl.contains(el) || hostEl && hostEl.contains(el));
     }
     function updatePickerHighlight(el) {
-      if (isPickerOwnedElement(el) || !el.isConnected) {
-        currentTarget = null;
-        if (pickerHighlightEl)
-          pickerHighlightEl.style.display = "none";
-        if (pickerHostEl)
-          pickerHostEl.removeAttribute("data-target-tag");
+      if (isPickerOwnedElement(el) || !el.isConnected || isHandledFrame(el)) {
+        hidePickerHighlight();
         return;
       }
       var rect = el.getBoundingClientRect();
       if (rect.width <= 0 || rect.height <= 0) {
-        currentTarget = null;
-        if (pickerHighlightEl)
-          pickerHighlightEl.style.display = "none";
-        if (pickerHostEl)
-          pickerHostEl.removeAttribute("data-target-tag");
+        hidePickerHighlight();
         return;
       }
+      if (!currentTarget)
+        notifyBackground({ type: "pick-hover", token: frameToken });
       currentTarget = el;
       var tagName = el.tagName ? el.tagName.toLowerCase() : "element";
       if (pickerTagEl) {
@@ -3673,6 +3770,10 @@ textarea {
     function onPickerMouseMove(e) {
       updatePickerHighlight(elementAtPoint(e.clientX, e.clientY));
     }
+    function onPickerMouseOut(e) {
+      if (!e.relatedTarget || isHandledFrame(e.relatedTarget))
+        hidePickerHighlight();
+    }
     function onPickerViewportChange() {
       if (currentTarget)
         updatePickerHighlight(currentTarget);
@@ -3684,6 +3785,10 @@ textarea {
     }
     function onPickerClick(e) {
       blockPickerEvent(e);
+      if (pickerAllowBtn && e.composedPath().indexOf(pickerAllowBtn) !== -1) {
+        requestFrameAccess("pick");
+        return;
+      }
       var el = elementAtPoint(e.clientX, e.clientY) || currentTarget;
       if (el)
         finishPick(el);
@@ -3693,9 +3798,12 @@ textarea {
         return;
       blockPickerEvent(e);
       cancelPick();
+      notifyBackground({ type: isTop ? "pick-ended" : "pick-cancel" });
     }
     function installPickerListeners() {
       document.addEventListener("mousemove", onPickerMouseMove, true);
+      document.addEventListener("mouseover", onPickerMouseMove, true);
+      document.addEventListener("mouseout", onPickerMouseOut, true);
       document.addEventListener("click", onPickerClick, true);
       document.addEventListener("mousedown", blockPickerEvent, true);
       document.addEventListener("mouseup", blockPickerEvent, true);
@@ -3709,6 +3817,8 @@ textarea {
     }
     function removePickerListeners() {
       document.removeEventListener("mousemove", onPickerMouseMove, true);
+      document.removeEventListener("mouseover", onPickerMouseMove, true);
+      document.removeEventListener("mouseout", onPickerMouseOut, true);
       document.removeEventListener("click", onPickerClick, true);
       document.removeEventListener("mousedown", blockPickerEvent, true);
       document.removeEventListener("mouseup", blockPickerEvent, true);
@@ -3727,6 +3837,7 @@ textarea {
       pickerHostEl = null;
       pickerHighlightEl = null;
       pickerTagEl = null;
+      pickerAllowBtn = null;
       currentTarget = null;
       picking = false;
     }
@@ -3780,17 +3891,16 @@ textarea {
       if (playBtn)
         playBtn.click();
     }
-    function startElementPicker() {
+    function startElementPicker(frameAccess) {
       if (picking) {
-        var existingHadOverlay = pickerHadOverlay;
-        teardownPicker();
-        pickerHadOverlay = existingHadOverlay;
-        picking = true;
-        buildPickerLayer();
-        installPickerListeners();
+        pickerFrameAccess = !!frameAccess;
+        refreshPickerBanner();
+        if (currentTarget)
+          updatePickerHighlight(currentTarget);
         return;
       }
       picking = true;
+      pickerFrameAccess = !!frameAccess;
       pickerHadOverlay = !!hostEl;
       if (hostEl) {
         suspendReaderForPicker();
@@ -3806,8 +3916,18 @@ textarea {
       if (!picking || !el)
         return;
       var extraction = extractFromElement(el);
-      var hadOverlay = pickerHadOverlay;
-      teardownPicker();
+      if (!isTop) {
+        teardownPicker();
+        notifyBackground({ type: "picked", extraction });
+        return;
+      }
+      finishPickWith(extraction);
+      notifyBackground({ type: "pick-ended" });
+    }
+    function finishPickWith(extraction) {
+      var hadOverlay = picking && pickerHadOverlay;
+      if (picking)
+        teardownPicker();
       pickerHadOverlay = false;
       pickerResumePlayback = false;
       if (hadOverlay && hostEl) {
@@ -3840,14 +3960,31 @@ textarea {
       }
     }
     chrome.runtime.onMessage.addListener(function(message) {
-      if (message && (message.kind === "page" || message.kind === "selection")) {
+      if (!message)
+        return;
+      if (message.kind === "pick") {
+        startElementPicker(message.frameAccess);
+      } else if (message.kind === "pick-cancel") {
+        cancelPick();
+      } else if (message.kind === "pick-hover") {
+        if (picking && message.token !== frameToken)
+          hidePickerHighlight();
+      } else if (!isTop) {
+        return;
+      } else if (message.kind === "show") {
+        if (picking)
+          cancelPick(false);
+        renderIntoOverlay(message.extraction).catch(function(err) {
+          console.error("Speed Reader: overlay failed to open.", err);
+        });
+      } else if (message.kind === "picked") {
+        finishPickWith(message.extraction);
+      } else if (message.kind === "page" || message.kind === "selection") {
         if (picking)
           cancelPick(false);
         openOverlay().catch(function(err) {
           console.error("Speed Reader: overlay failed to open.", err);
         });
-      } else if (message && message.kind === "pick") {
-        startElementPicker();
       }
     });
   })();

@@ -45,7 +45,18 @@ import overlayCssText from "./overlay.css";
   var pickerTagEl = null;
   var currentTarget = null;
   var pickerResumePlayback = false;
+  var pickerFrameAccess = false;
+  var pickerAllowBtn = null;
   var lifecycleVersion = 0;
+
+  // background.js injects into every reachable frame. The top frame owns
+  // the reader overlay and the picker banner; child frames only run the
+  // picker highlight and hand their picks and extractions back through
+  // the service worker.
+  var isTop = window === window.top;
+  // Identifies this frame's picker in pick-hover broadcasts.
+  var frameToken = Math.random().toString(36).slice(2);
+  var MIN_BLOCKED_FRAME_AREA = 200 * 150;
 
   function isReaderKey(e) {
     if (e.key === " " || e.key === "Spacebar") return true;
@@ -118,13 +129,47 @@ import overlayCssText from "./overlay.css";
     return collectParagraphs(root);
   }
 
+  function isFrameElement(el) {
+    return !!(el && (el.tagName === "IFRAME" || el.tagName === "FRAME"));
+  }
+
+  // A frame whose document this script cannot see (cross-origin). The
+  // extension can still read it once the optional frame access is granted.
+  function isBlockedFrame(el) {
+    try {
+      return !el.contentDocument;
+    } catch (err) {
+      return true;
+    }
+  }
+
+  function countBlockedFrames() {
+    var frames = document.querySelectorAll("iframe, frame");
+    var n = 0;
+    for (var i = 0; i < frames.length; i++) {
+      var rect = frames[i].getBoundingClientRect();
+      if (rect.width * rect.height < MIN_BLOCKED_FRAME_AREA) continue;
+      if (isBlockedFrame(frames[i])) n++;
+    }
+    return n;
+  }
+
+  function countWords(text) {
+    var trimmed = (text || "").trim();
+    return trimmed ? trimmed.split(/\s+/).length : 0;
+  }
+
   function extractFromElement(el) {
-    return {
+    var extraction = {
       rung: 4,
       rungLabel: "Element",
       title: document.title || null,
       text: collectParagraphs(el)
     };
+    if (isFrameElement(el) && isBlockedFrame(el) && !extraction.text.trim()) {
+      extraction.needsFrameAccess = true;
+    }
+    return extraction;
   }
 
   function runExtraction() {
@@ -157,6 +202,32 @@ import overlayCssText from "./overlay.css";
 
     return { rung: 0, rungLabel: null, title: null, text: "" };
   }
+
+  function notifyBackground(message) {
+    try {
+      chrome.runtime.sendMessage(message, function () {
+        void chrome.runtime.lastError;
+      });
+    } catch (err) {
+      // Extension reloaded underneath this page; nothing to notify.
+    }
+  }
+
+  function requestFrameAccess(resumeKind) {
+    notifyBackground({ type: "open-grant", resume: resumeKind });
+  }
+
+  // Called by background.js through scripting.executeScript in every
+  // frame (same isolated world), which then chooses one extraction.
+  window.__SPEED_READER_API__ = {
+    extract: function () {
+      var extraction = runExtraction();
+      extraction.words = countWords(extraction.text);
+      extraction.area = window.innerWidth * window.innerHeight;
+      extraction.blockedFrames = isTop ? countBlockedFrames() : 0;
+      return extraction;
+    }
+  };
 
   function createChromeStorageAdapter() {
     return {
@@ -289,7 +360,14 @@ import overlayCssText from "./overlay.css";
     pickBtn.setAttribute("aria-label", "Pick an element to speed read");
     pickBtn.title = "Pick an element";
     pickBtn.textContent = "Pick element";
-    pickBtn.addEventListener("click", startElementPicker);
+    pickBtn.addEventListener("click", function () {
+      startElementPicker(false);
+      chrome.runtime.sendMessage({ type: "start-pick" }, function (response) {
+        if (chrome.runtime.lastError || !response || !picking) return;
+        pickerFrameAccess = !!response.frameAccess;
+        refreshPickerBanner();
+      });
+    });
 
     var closeBtn = document.createElement("button");
     closeBtn.type = "button";
@@ -344,7 +422,7 @@ import overlayCssText from "./overlay.css";
   }
 
   async function renderExtraction(refs, extraction, renderVersion) {
-    var hasText = !!(extraction.text && extraction.text.trim());
+    var hasText = !!(extraction.text && extraction.text.trim()) && !extraction.needsFrameAccess;
     refs.emptyEl.hidden = hasText;
     refs.readerRootEl.hidden = !hasText;
 
@@ -357,9 +435,24 @@ import overlayCssText from "./overlay.css";
       refs.rungEl.textContent = extraction.rungLabel || "Nothing found";
       refs.titleEl.textContent = document.title || "";
       refs.metaEl.textContent = "";
-      refs.emptyEl.textContent = extraction.rung === 4
-        ? "Nothing readable in that element, pick another."
-        : "Nothing readable found, select text instead.";
+      if (extraction.needsFrameAccess) {
+        refs.emptyEl.textContent = extraction.rung === 4
+          ? "That element is an embedded frame from another site. Speed Reader needs your OK to read inside embedded frames."
+          : "This page's text lives in an embedded frame from another site. Speed Reader needs your OK to read inside embedded frames.";
+        var grantBtn = document.createElement("button");
+        grantBtn.type = "button";
+        grantBtn.className = "sr-ext-grant";
+        grantBtn.textContent = "Allow reading embedded frames";
+        grantBtn.addEventListener("click", function () {
+          requestFrameAccess(extraction.rung === 4 ? "pick" : "page");
+        });
+        refs.emptyEl.appendChild(document.createElement("br"));
+        refs.emptyEl.appendChild(grantBtn);
+      } else {
+        refs.emptyEl.textContent = extraction.rung === 4
+          ? "Nothing readable in that element, pick another."
+          : "Nothing readable found, select text instead.";
+      }
       return;
     }
 
@@ -452,7 +545,11 @@ import overlayCssText from "./overlay.css";
       "padding:9px 14px;border:1px solid rgba(255,255,255,.28);border-radius:999px;" +
       "background:#173238;color:#fff;box-shadow:0 6px 24px rgba(0,0,0,.28);" +
       "font:600 13px/1.35 -apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,Helvetica,Arial,sans-serif;" +
-      "text-align:center;white-space:nowrap;}";
+      "text-align:center;white-space:nowrap;}" +
+      ".banner button{pointer-events:auto;margin-left:10px;padding:3px 10px;border:0;border-radius:999px;" +
+      "background:#4fb8c4;color:#08282c;cursor:pointer;" +
+      "font:700 12px/1.35 -apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,Helvetica,Arial,sans-serif;}" +
+      ".banner button[hidden]{display:none;}";
   }
 
   function buildPickerLayer() {
@@ -473,14 +570,41 @@ import overlayCssText from "./overlay.css";
     pickerTagEl.className = "tag";
     pickerHighlightEl.appendChild(pickerTagEl);
 
+    pickerShadow.appendChild(styleEl);
+    pickerShadow.appendChild(pickerHighlightEl);
+    if (!isTop) return;
+
     var bannerEl = document.createElement("div");
     bannerEl.className = "banner";
     bannerEl.setAttribute("role", "status");
-    bannerEl.textContent = "Click an element to read it. Esc to cancel.";
+    bannerEl.appendChild(document.createTextNode("Click an element to read it. Esc to cancel."));
 
-    pickerShadow.appendChild(styleEl);
-    pickerShadow.appendChild(pickerHighlightEl);
+    pickerAllowBtn = document.createElement("button");
+    pickerAllowBtn.type = "button";
+    pickerAllowBtn.textContent = "Allow reading embedded frames";
+    pickerAllowBtn.hidden = true;
+    bannerEl.appendChild(pickerAllowBtn);
+
     pickerShadow.appendChild(bannerEl);
+    refreshPickerBanner();
+  }
+
+  // Offer frame access only when the page has sizable frames the picker
+  // cannot reach yet.
+  function refreshPickerBanner() {
+    if (!pickerAllowBtn) return;
+    pickerAllowBtn.hidden = pickerFrameAccess || countBlockedFrames() === 0;
+  }
+
+  // A frame the picker also runs inside handles its own highlight.
+  function isHandledFrame(el) {
+    return isFrameElement(el) && (pickerFrameAccess || !isBlockedFrame(el));
+  }
+
+  function hidePickerHighlight() {
+    currentTarget = null;
+    if (pickerHighlightEl) pickerHighlightEl.style.display = "none";
+    if (pickerHostEl) pickerHostEl.removeAttribute("data-target-tag");
   }
 
   function isPickerOwnedElement(el) {
@@ -494,21 +618,21 @@ import overlayCssText from "./overlay.css";
   }
 
   function updatePickerHighlight(el) {
-    if (isPickerOwnedElement(el) || !el.isConnected) {
-      currentTarget = null;
-      if (pickerHighlightEl) pickerHighlightEl.style.display = "none";
-      if (pickerHostEl) pickerHostEl.removeAttribute("data-target-tag");
+    if (isPickerOwnedElement(el) || !el.isConnected || isHandledFrame(el)) {
+      hidePickerHighlight();
       return;
     }
 
     var rect = el.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) {
-      currentTarget = null;
-      if (pickerHighlightEl) pickerHighlightEl.style.display = "none";
-      if (pickerHostEl) pickerHostEl.removeAttribute("data-target-tag");
+      hidePickerHighlight();
       return;
     }
 
+    // Cross-origin frames run in their own process, so a document never
+    // sees the pointer leave into one. Whenever this frame starts
+    // highlighting, the other frames are told to drop theirs.
+    if (!currentTarget) notifyBackground({ type: "pick-hover", token: frameToken });
     currentTarget = el;
     var tagName = el.tagName ? el.tagName.toLowerCase() : "element";
     if (pickerTagEl) {
@@ -537,6 +661,12 @@ import overlayCssText from "./overlay.css";
     updatePickerHighlight(elementAtPoint(e.clientX, e.clientY));
   }
 
+  // The pointer left this document (into a child frame, or out of this
+  // frame into its parent): the other document's picker takes over.
+  function onPickerMouseOut(e) {
+    if (!e.relatedTarget || isHandledFrame(e.relatedTarget)) hidePickerHighlight();
+  }
+
   function onPickerViewportChange() {
     if (currentTarget) updatePickerHighlight(currentTarget);
   }
@@ -549,6 +679,10 @@ import overlayCssText from "./overlay.css";
 
   function onPickerClick(e) {
     blockPickerEvent(e);
+    if (pickerAllowBtn && e.composedPath().indexOf(pickerAllowBtn) !== -1) {
+      requestFrameAccess("pick");
+      return;
+    }
     var el = elementAtPoint(e.clientX, e.clientY) || currentTarget;
     if (el) finishPick(el);
   }
@@ -557,10 +691,15 @@ import overlayCssText from "./overlay.css";
     if (e.key !== "Escape" && e.key !== "Esc") return;
     blockPickerEvent(e);
     cancelPick();
+    // Stop the pickers running in the other frames too. From a child
+    // frame this also restores the reader in the top frame.
+    notifyBackground({ type: isTop ? "pick-ended" : "pick-cancel" });
   }
 
   function installPickerListeners() {
     document.addEventListener("mousemove", onPickerMouseMove, true);
+    document.addEventListener("mouseover", onPickerMouseMove, true);
+    document.addEventListener("mouseout", onPickerMouseOut, true);
     document.addEventListener("click", onPickerClick, true);
     document.addEventListener("mousedown", blockPickerEvent, true);
     document.addEventListener("mouseup", blockPickerEvent, true);
@@ -575,6 +714,8 @@ import overlayCssText from "./overlay.css";
 
   function removePickerListeners() {
     document.removeEventListener("mousemove", onPickerMouseMove, true);
+    document.removeEventListener("mouseover", onPickerMouseMove, true);
+    document.removeEventListener("mouseout", onPickerMouseOut, true);
     document.removeEventListener("click", onPickerClick, true);
     document.removeEventListener("mousedown", blockPickerEvent, true);
     document.removeEventListener("mouseup", blockPickerEvent, true);
@@ -593,6 +734,7 @@ import overlayCssText from "./overlay.css";
     pickerHostEl = null;
     pickerHighlightEl = null;
     pickerTagEl = null;
+    pickerAllowBtn = null;
     currentTarget = null;
     picking = false;
   }
@@ -652,18 +794,19 @@ import overlayCssText from "./overlay.css";
     if (playBtn) playBtn.click();
   }
 
-  function startElementPicker() {
+  function startElementPicker(frameAccess) {
     if (picking) {
-      var existingHadOverlay = pickerHadOverlay;
-      teardownPicker();
-      pickerHadOverlay = existingHadOverlay;
-      picking = true;
-      buildPickerLayer();
-      installPickerListeners();
+      // Already picking (a repeat gesture, or background.js fanning the
+      // picker out after the Pick element button or a new frame grant):
+      // keep the session and only refresh what frame access changed.
+      pickerFrameAccess = !!frameAccess;
+      refreshPickerBanner();
+      if (currentTarget) updatePickerHighlight(currentTarget);
       return;
     }
 
     picking = true;
+    pickerFrameAccess = !!frameAccess;
     pickerHadOverlay = !!hostEl;
     if (hostEl) {
       suspendReaderForPicker();
@@ -680,8 +823,19 @@ import overlayCssText from "./overlay.css";
   function finishPick(el) {
     if (!picking || !el) return;
     var extraction = extractFromElement(el);
-    var hadOverlay = pickerHadOverlay;
-    teardownPicker();
+    if (!isTop) {
+      // The reader lives in the top frame; background.js relays this.
+      teardownPicker();
+      notifyBackground({ type: "picked", extraction: extraction });
+      return;
+    }
+    finishPickWith(extraction);
+    notifyBackground({ type: "pick-ended" });
+  }
+
+  function finishPickWith(extraction) {
+    var hadOverlay = picking && pickerHadOverlay;
+    if (picking) teardownPicker();
     pickerHadOverlay = false;
     pickerResumePlayback = false;
 
@@ -716,13 +870,27 @@ import overlayCssText from "./overlay.css";
   }
 
   chrome.runtime.onMessage.addListener(function (message) {
-    if (message && (message.kind === "page" || message.kind === "selection")) {
+    if (!message) return;
+    if (message.kind === "pick") {
+      startElementPicker(message.frameAccess);
+    } else if (message.kind === "pick-cancel") {
+      cancelPick();
+    } else if (message.kind === "pick-hover") {
+      if (picking && message.token !== frameToken) hidePickerHighlight();
+    } else if (!isTop) {
+      return;
+    } else if (message.kind === "show") {
+      if (picking) cancelPick(false);
+      renderIntoOverlay(message.extraction).catch(function (err) {
+        console.error("Speed Reader: overlay failed to open.", err);
+      });
+    } else if (message.kind === "picked") {
+      finishPickWith(message.extraction);
+    } else if (message.kind === "page" || message.kind === "selection") {
       if (picking) cancelPick(false);
       openOverlay().catch(function (err) {
         console.error("Speed Reader: overlay failed to open.", err);
       });
-    } else if (message && message.kind === "pick") {
-      startElementPicker();
     }
   });
 })();
