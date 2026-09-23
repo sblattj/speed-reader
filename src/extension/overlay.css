@@ -148,7 +148,10 @@
   gap: 0.55rem;
 }
 
-.sr-ext-pick {
+.sr-ext-grant { margin-top: 1rem; }
+
+.sr-ext-pick,
+.sr-ext-grant {
   min-height: 34px;
   padding: 0.45rem 0.8rem;
   border: 1px solid var(--accent-control);
@@ -159,8 +162,10 @@
   cursor: pointer;
   transition: filter 0.15s ease;
 }
-.sr-ext-pick:hover { filter: brightness(1.08); }
-.sr-ext-pick:focus-visible {
+.sr-ext-pick:hover,
+.sr-ext-grant:hover { filter: brightness(1.08); }
+.sr-ext-pick:focus-visible,
+.sr-ext-grant:focus-visible {
   outline: 2px solid var(--accent-pivot);
   outline-offset: 2px;
 }

@@ -39,6 +39,9 @@ const DIST_BACKGROUND_PATH = join(DIST_DIR, "background.js");
 const EXT_ICONS_SRC_DIR = join(ROOT, "extension/icons");
 const DIST_ICONS_DIR = join(DIST_DIR, "icons");
 const ICON_FILES = ["icon16.png", "icon32.png", "icon48.png", "icon128.png"];
+// The frame-access grant page (also the options page) ships as-is.
+const STATIC_EXT_FILES = ["grant.html", "grant.js"];
+const EXPECTED_OPTIONAL_HOST_PERMISSIONS = ["<all_urls>"];
 const EXPECTED_PERMISSIONS = ["activeTab", "scripting", "contextMenus", "storage", "commands"];
 
 type GateResult = { name: string; ok: boolean; detail: string };
@@ -82,6 +85,7 @@ function writeExtensionDist(contentJs: string): { manifestText: string; backgrou
   rmSync(DIST_ICONS_DIR, { recursive: true, force: true });
   mkdirSync(DIST_ICONS_DIR, { recursive: true });
   for (const f of ICON_FILES) cpSync(join(EXT_ICONS_SRC_DIR, f), join(DIST_ICONS_DIR, f));
+  for (const f of STATIC_EXT_FILES) cpSync(join(ROOT, "extension", f), join(DIST_DIR, f));
   return { manifestText, backgroundText };
 }
 
@@ -123,16 +127,25 @@ function gateManifestJson(manifestText: string): GateResult {
     }
   }
 
+  const optional = JSON.stringify(manifest.optional_host_permissions || []);
+  if (optional !== JSON.stringify(EXPECTED_OPTIONAL_HOST_PERMISSIONS)) {
+    problems.push(
+      "expected optional_host_permissions exactly " + JSON.stringify(EXPECTED_OPTIONAL_HOST_PERMISSIONS) + ", got " + optional
+    );
+  }
+
   return {
     name: "manifest-json",
     ok: problems.length === 0,
-    detail: problems.length === 0 ? "valid JSON, permissions exact, no host_permissions" : problems.join("; ")
+    detail: problems.length === 0
+      ? "valid JSON, permissions exact, no host_permissions, optional host access only"
+      : problems.join("; ")
   };
 }
 
 function gateDistContents(): GateResult {
   const entries = readdirSync(DIST_DIR).sort();
-  const expected = ["background.js", "content.js", "icons", "manifest.json"];
+  const expected = ["background.js", "content.js", "grant.html", "grant.js", "icons", "manifest.json"];
   const icons = readdirSync(DIST_ICONS_DIR).sort();
   const expectedIcons = [...ICON_FILES].sort();
   const ok =
@@ -297,6 +310,8 @@ async function main() {
     gateDashAndWordScan(html),
     gateNodeCheck("content-js-syntax", DIST_CONTENT_PATH),
     gateNodeCheck("background-js-syntax", DIST_BACKGROUND_PATH),
+    gateNodeCheck("grant-js-syntax", join(DIST_DIR, "grant.js")),
+    gateDashAndWordScan(readFileSync(join(DIST_DIR, "grant.html"), "utf8")),
     gateManifestJson(manifestText),
     gateDistContents(),
     gateNoScratchpadRefs([
